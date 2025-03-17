@@ -48,7 +48,7 @@
     @if (uploadedFiles.Any())
     {
         <MudPaper Class="pa-4 mt-4">
-            <MudText Typo="Typo.h6">Метаданные последнего добавленного файла</MudText>
+            <MudText Typo="Typo.h6">Last Added File Metadata</MudText>
             @if (uploadedFiles.Last().Metadata is not null)
             {
                 <MudText>Title: @uploadedFiles.Last().Metadata.Title</MudText>
@@ -60,7 +60,7 @@
             }
             else
             {
-                <MudText>Метаданные не найдены</MudText>
+                <MudText>Problems with metadata retrieval</MudText>
             }
         </MudPaper>
     }
@@ -103,7 +103,7 @@
 </MudContainer>
 
 @code {
-    
+    private const long MaxFileSize = 40L * 1024L * 1024L;
     private List<FileData> uploadedFiles = new();
     private List<FileData> processedFiles = new();
     
@@ -144,7 +144,7 @@
     {
         foreach (var file in e.GetMultipleFiles())
         {
-            using var stream = file.OpenReadStream();
+            using var stream = file.OpenReadStream(maxAllowedSize: MaxFileSize);
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms);
             var fileBytes = ms.ToArray();
