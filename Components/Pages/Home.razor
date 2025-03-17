@@ -4,29 +4,81 @@
 @using MudBlazor
 @using VoidPDF.Data
 @inject IJSRuntime JSRuntime
-
+@inject ISnackbar Snackbar
 <PageTitle>PDF Sanitizer</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
     <!-- Верхняя зона загрузки файлов -->
-    <MudPaper Class="pa-6 d-flex flex-column align-center justify-center" Elevation="4">
+
+    <MudStack Style="width: 100%">
+        <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                       @ref="@_fileUpload"
+                       OnFilesChanged="OnInputFileChanged"
+                       AppendMultipleFiles
+                       Hidden="@false"
+                       InputClass="absolute mud-width-full mud-height-full overflow-hidden z-10"
+                       InputStyle="opacity:0"
+                       tabindex="-1"
+                       @ondrop="@ClearDragClass"
+                       @ondragenter="@SetDragClass"
+                       @ondragleave="@ClearDragClass"
+                       @ondragend="@ClearDragClass">
+            <ActivatorContent>
+                <MudPaper Height="300px"
+                          Outlined="true"
+                          Class="@_dragClass">
+                    <MudText Typo="Typo.h6">
+                        Drag and drop files here or click
+                    </MudText>
+                    @foreach (var file in _fileNames)
+                    {
+                        <MudChip T="string"
+                                 Color="Color.Dark"
+                                 Text="@file"
+                                 tabindex="-1"/>
+                    }
+                </MudPaper>
+            </ActivatorContent>
+        </MudFileUpload>
+        <MudToolBar Gutters="@false"
+                    Class="relative d-flex justify-end gap-4">
+            <MudButton Color="Color.Primary"
+                       OnClick="@OpenFilePickerAsync"
+                       Variant="Variant.Filled">
+                Open file picker
+            </MudButton>
+            <MudButton Color="Color.Primary"
+                       Disabled="@(!_fileNames.Any())"
+                       OnClick="@Upload"
+                       Variant="Variant.Filled">
+                Upload
+            </MudButton>
+            <MudButton Color="Color.Error"
+                       Disabled="@(!_fileNames.Any())"
+                       OnClick="@ClearAsync"
+                       Variant="Variant.Filled">
+                Clear
+            </MudButton>
+        </MudToolBar>
+    </MudStack>
+    @*<MudPaper Class="pa-6 d-flex flex-column align-center justify-center" Elevation="4">
         <MudText Typo="Typo.h6" Align="Align.Center">Перетащите PDF-файлы сюда</MudText>
         <InputFile OnChange="OnFilesSelected" accept=".pdf" multiple style="margin: 20px auto; display: block;"/>
-    </MudPaper>
+    </MudPaper>*@
 
     <!-- Панель настроек -->
     <MudGrid Class="mt-6">
         <!-- Левый столбец: чекбоксы для параметров очистки -->
         <MudItem xs="12" md="6">
             <MudPaper Class="pa-4">
-                <MudSwitch @bind-Value="fullClean" Color="Color.Success" UncheckedColor="Color.Error" Label="Full Clean" />
-                <MudSwitch @bind-Value="deleteJavaScript" Color="Color.Success" UncheckedColor="Color.Error" Label="Delete JavaScript" Disabled="fullClean" />
-                <MudSwitch @bind-Value="removeAnnotations" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Annotations" Disabled="fullClean" />
-                <MudSwitch @bind-Value="removeFormFields" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Form Fields" Disabled="fullClean" />
-                <MudSwitch @bind-Value="removeAcroForms" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove AcroForms" Disabled="fullClean" />
-                <MudSwitch @bind-Value="removeActions" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Actions" Disabled="fullClean" />
-                <MudSwitch @bind-Value="removeEmbeddedFiles" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Embedded Files" Disabled="fullClean" />
-                <MudSwitch @bind-Value="clearMetadata" Color="Color.Success" UncheckedColor="Color.Error" Label="Clear Metadata" Disabled="fullClean" />
+                <MudSwitch @bind-Value="fullClean" Color="Color.Success" UncheckedColor="Color.Error" Label="Full Clean"/>
+                <MudSwitch @bind-Value="deleteJavaScript" Color="Color.Success" UncheckedColor="Color.Error" Label="Delete JavaScript" Disabled="fullClean"/>
+                <MudSwitch @bind-Value="removeAnnotations" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Annotations" Disabled="fullClean"/>
+                <MudSwitch @bind-Value="removeFormFields" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Form Fields" Disabled="fullClean"/>
+                <MudSwitch @bind-Value="removeAcroForms" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove AcroForms" Disabled="fullClean"/>
+                <MudSwitch @bind-Value="removeActions" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Actions" Disabled="fullClean"/>
+                <MudSwitch @bind-Value="removeEmbeddedFiles" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Embedded Files" Disabled="fullClean"/>
+                <MudSwitch @bind-Value="clearMetadata" Color="Color.Success" UncheckedColor="Color.Error" Label="Clear Metadata" Disabled="fullClean"/>
 
             </MudPaper>
         </MudItem>
@@ -67,10 +119,10 @@
 
     <!-- Кнопки обработки и скачивания файлов -->
     <MudButton Class="mt-4 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="ProcessFiles" Disabled="@(!uploadedFiles.Any())">
-        Обработать PDF
+        Process PDF's
     </MudButton>
     <MudButton Class="mt-4" Variant="Variant.Outlined" Color="Color.Secondary" OnClick="DownloadProcessedFiles" Disabled="@(!processedFiles.Any())">
-        Скачать все обработанные PDF
+        Download All
     </MudButton>
 
     <!-- Список загруженных файлов -->
@@ -103,10 +155,54 @@
 </MudContainer>
 
 @code {
+#nullable enable
+    private const string DefaultDragClass = "relative rounded-lg border-2 border-dashed pa-4 mt-4 mud-width-full mud-height-full";
+    private string _dragClass = DefaultDragClass;
+    private readonly List<string> _fileNames = new();
+    private MudFileUpload<IReadOnlyList<IBrowserFile>>? _fileUpload;
+
+    private async Task ClearAsync()
+    {
+        await (_fileUpload?.ClearAsync() ?? Task.CompletedTask);
+        _fileNames.Clear();
+        ClearDragClass();
+    }
+
+    private Task OpenFilePickerAsync()
+        => _fileUpload?.OpenFilePickerAsync() ?? Task.CompletedTask;
+
+    private void OnInputFileChanged(InputFileChangeEventArgs e)
+    {
+        ClearDragClass();
+        var files = e.GetMultipleFiles();
+        foreach (var file in files)
+        {
+            _fileNames.Add(file.Name);
+        }
+
+        OnFilesSelected(e);
+    }
+
+    private void Upload()
+    {
+// Upload the files here
+        Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopCenter;
+        Snackbar.Add("Uploaded");
+    }
+
+    private void SetDragClass()
+        => _dragClass = $"{DefaultDragClass} mud-border-primary";
+
+    private void ClearDragClass()
+        => _dragClass = DefaultDragClass;
+
+}
+
+@code {
     private const long MaxFileSize = 40L * 1024L * 1024L;
     private List<FileData> uploadedFiles = new();
     private List<FileData> processedFiles = new();
-    
+
     private bool fullClean = false;
     private bool deleteJavaScript = false;
     private bool removeAnnotations = false;
@@ -119,7 +215,7 @@
     private void OnFullCleanChanged(bool value)
     {
         fullClean = value;
-    
+
         deleteJavaScript = value;
         removeAnnotations = value;
         removeFormFields = value;
@@ -127,19 +223,18 @@
         removeActions = value;
         removeEmbeddedFiles = value;
         clearMetadata = value;
-    
+
         StateHasChanged(); //hook
     }
-    
-    
- 
+
+
     private string manualTitle = "";
     private string manualAuthor = "";
     private string manualSubject = "";
     private string manualCreator = "";
     private string manualProducer = "";
     private string manualKeywords = "";
-    
+
     private async Task OnFilesSelected(InputFileChangeEventArgs e)
     {
         foreach (var file in e.GetMultipleFiles())
@@ -157,7 +252,7 @@
             });
         }
     }
-    
+
     private async Task<Metadata?> GetPdfMetadata(byte[] pdfBytes)
     {
         try
@@ -173,7 +268,7 @@
             return null;
         }
     }
-    
+
     private void RemoveFile(FileData file)
     {
         uploadedFiles.Remove(file);
@@ -213,7 +308,7 @@
         }
 
         processedFiles.Clear();
-        
+
         foreach (var file in uploadedFiles)
         {
             var processedFile = new FileData
@@ -231,7 +326,7 @@
         var option = new QuickSanitizeOptions();
         if (js) option = QuickSanitizeOptions.JavaScript;
         if (fullClean) option = QuickSanitizeOptions.FullClean;
-        
+
         Metadata? metadata = null;
         if (!string.IsNullOrWhiteSpace(manualTitle) ||
             !string.IsNullOrWhiteSpace(manualAuthor) ||
@@ -272,7 +367,7 @@
         var fileName = file.FileName;
         await JSRuntime.InvokeVoidAsync("downloadFile", fileName, fileBase64);
     }
-    
+
     private async Task DownloadProcessedFiles()
     {
         foreach (var file in processedFiles)
@@ -280,7 +375,7 @@
             await DownloadFile(file);
         }
     }
-    
+
     private class FileData
     {
         public string FileName { get; set; } = string.Empty;
