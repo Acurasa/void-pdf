@@ -1,59 +1,291 @@
 ﻿@page "/"
+@using VoidPDF.Core
+@using VoidPDF.Data.Helpers
+@using MudBlazor
+@using VoidPDF.Data
+@inject IJSRuntime JSRuntime
 
-<PageTitle>Home</PageTitle>
+<PageTitle>PDF Sanitizer</PageTitle>
 
-<MudText Typo="Typo.h3" GutterBottom="true">Hello, world!</MudText>
-<MudText Class="mb-8">Welcome to your new app, powered by MudBlazor and the .NET 9 Template!</MudText>
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <!-- Верхняя зона загрузки файлов -->
+    <MudPaper Class="pa-6 d-flex flex-column align-center justify-center" Elevation="4">
+        <MudText Typo="Typo.h6" Align="Align.Center">Перетащите PDF-файлы сюда</MudText>
+        <InputFile OnChange="OnFilesSelected" accept=".pdf" multiple style="margin: 20px auto; display: block;"/>
+    </MudPaper>
 
-<MudAlert Severity="Severity.Normal">
-    You can find documentation and examples on our website here:
-    <MudLink Href="https://mudblazor.com" Target="_blank" Typo="Typo.body2" Color="Color.Primary">
-        <b>www.mudblazor.com</b>
-    </MudLink>
-</MudAlert>
+    <!-- Панель настроек -->
+    <MudGrid Class="mt-6">
+        <!-- Левый столбец: чекбоксы для параметров очистки -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4">
+                <MudSwitch @bind-Value="fullClean" Color="Color.Success" UncheckedColor="Color.Error" Label="Full Clean" />
+                <MudSwitch @bind-Value="deleteJavaScript" Color="Color.Success" UncheckedColor="Color.Error" Label="Delete JavaScript" Disabled="fullClean" />
+                <MudSwitch @bind-Value="removeAnnotations" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Annotations" Disabled="fullClean" />
+                <MudSwitch @bind-Value="removeFormFields" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Form Fields" Disabled="fullClean" />
+                <MudSwitch @bind-Value="removeAcroForms" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove AcroForms" Disabled="fullClean" />
+                <MudSwitch @bind-Value="removeActions" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Actions" Disabled="fullClean" />
+                <MudSwitch @bind-Value="removeEmbeddedFiles" Color="Color.Success" UncheckedColor="Color.Error" Label="Remove Embedded Files" Disabled="fullClean" />
+                <MudSwitch @bind-Value="clearMetadata" Color="Color.Success" UncheckedColor="Color.Error" Label="Clear Metadata" Disabled="fullClean" />
 
-<br />
-<MudText Typo="Typo.h5" GutterBottom="true">Interactivity in this Template</MudText>
-<br />
-<MudText Typo="Typo.body2">
-    When you opt for the "Global" Interactivity Location, <br />
-    the render modes are defined in App.razor and consequently apply to all child components.<br />
-    In this case, providers are globally set in the MainLayout.<br />
-    <br />
-    On the other hand, if you choose the "Per page/component" Interactivity Location,<br />
-    it is necessary to include the <br />
-    <br />
-    &lt;MudPopoverProvider /&gt; <br />
-    &lt;MudDialogProvider /&gt; <br />
-    &lt;MudSnackbarProvider /&gt; <br />
-    <br />
-    components on every interactive page.<br />
-    <br />
-    If a render mode is not specified for a page, it defaults to Server-Side Rendering (SSR),<br />
-    similar to this page. While MudBlazor allows pages to be rendered in SSR,<br />
-    please note that interactive features, such as buttons and dropdown menus, will not be functional.
-</MudText>
+            </MudPaper>
+        </MudItem>
+        <!-- Правый столбец: ручное редактирование метаданных -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6">Redact Metadata Manually</MudText>
+                <MudTextField Label="Title" @bind-Value="manualTitle"/>
+                <MudTextField Label="Author" @bind-Value="manualAuthor"/>
+                <MudTextField Label="Subject" @bind-Value="manualSubject"/>
+                <MudTextField Label="Creator" @bind-Value="manualCreator"/>
+                <MudTextField Label="Producer" @bind-Value="manualProducer"/>
+                <MudTextField Label="Keywords" @bind-Value="manualKeywords"/>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 
-<br />
-<MudText Typo="Typo.h5" GutterBottom="true">What's New in Blazor with the Release of .NET 9</MudText>
-<br />
+    <!-- Секция для отображения метаданных последнего добавленного файла -->
+    @if (uploadedFiles.Any())
+    {
+        <MudPaper Class="pa-4 mt-4">
+            <MudText Typo="Typo.h6">Метаданные последнего добавленного файла</MudText>
+            @if (uploadedFiles.Last().Metadata is not null)
+            {
+                <MudText>Title: @uploadedFiles.Last().Metadata.Title</MudText>
+                <MudText>Author: @uploadedFiles.Last().Metadata.Author</MudText>
+                <MudText>Subject: @uploadedFiles.Last().Metadata.Subject</MudText>
+                <MudText>Creator: @uploadedFiles.Last().Metadata.Creator</MudText>
+                <MudText>Producer: @uploadedFiles.Last().Metadata.Producer</MudText>
+                <MudText>Keywords: @uploadedFiles.Last().Metadata.Keywords</MudText>
+            }
+            else
+            {
+                <MudText>Метаданные не найдены</MudText>
+            }
+        </MudPaper>
+    }
 
-<MudText Typo="Typo.h6" GutterBottom="true">Prerendering</MudText>
-<MudText Typo="Typo.body2" GutterBottom="true">
-    If you're exploring the features of .NET 9 Blazor,<br /> you might be pleasantly surprised to learn that each page is prerendered on the server,<br /> regardless of the selected render mode.<br /><br />
-    This means that you'll need to inject all necessary services on the server,<br /> even when opting for the wasm (WebAssembly) render mode.<br /><br />
-    This prerendering functionality is crucial to ensuring that WebAssembly mode feels fast and responsive,<br /> especially when it comes to initial page load times.<br /><br />
-    For more information on how to detect prerendering and leverage the RenderContext, you can refer to the following link:
-    <MudLink Href="https://github.com/dotnet/aspnetcore/issues/51468#issuecomment-1783568121" Target="_blank" Typo="Typo.body2" Color="Color.Primary">
-        More details
-    </MudLink>
-</MudText>
+    <!-- Кнопки обработки и скачивания файлов -->
+    <MudButton Class="mt-4 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="ProcessFiles" Disabled="@(!uploadedFiles.Any())">
+        Обработать PDF
+    </MudButton>
+    <MudButton Class="mt-4" Variant="Variant.Outlined" Color="Color.Secondary" OnClick="DownloadProcessedFiles" Disabled="@(!processedFiles.Any())">
+        Скачать все обработанные PDF
+    </MudButton>
 
-<br />
-<MudText Typo="Typo.h6" GutterBottom="true">InteractiveAuto</MudText>
-<MudText Typo="Typo.body2">
-    A discussion on how to achieve this can be found here:
-    <MudLink Href="https://github.com/dotnet/aspnetcore/issues/51468#issue-1950424116" Target="_blank" Typo="Typo.body2" Color="Color.Primary">
-        More details
-    </MudLink>
-</MudText>
+    <!-- Список загруженных файлов -->
+    @if (uploadedFiles.Any())
+    {
+        <MudList T="FileData" Class="mt-4">
+            @foreach (var file in uploadedFiles)
+            {
+                <MudListItem T="FileData">
+                    <MudListItemText>@file.FileName</MudListItemText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => RemoveFile(file))"/>
+                </MudListItem>
+            }
+        </MudList>
+    }
+
+    <!-- Список обработанных файлов с кнопкой скачивания -->
+    @if (processedFiles.Any())
+    {
+        <MudList T="FileData" Class="mt-4">
+            @foreach (var file in processedFiles)
+            {
+                <MudListItem T="FileData">
+                    <MudListItemText>@file.FileName</MudListItemText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Download" Color="Color.Primary" OnClick="@(() => DownloadFile(file))"/>
+                </MudListItem>
+            }
+        </MudList>
+    }
+</MudContainer>
+
+@code {
+    
+    private List<FileData> uploadedFiles = new();
+    private List<FileData> processedFiles = new();
+    
+    private bool fullClean = false;
+    private bool deleteJavaScript = false;
+    private bool removeAnnotations = false;
+    private bool removeFormFields = false;
+    private bool removeAcroForms = false;
+    private bool removeActions = false;
+    private bool removeEmbeddedFiles = false;
+    private bool clearMetadata = false;
+
+    private void OnFullCleanChanged(bool value)
+    {
+        fullClean = value;
+    
+        deleteJavaScript = value;
+        removeAnnotations = value;
+        removeFormFields = value;
+        removeAcroForms = value;
+        removeActions = value;
+        removeEmbeddedFiles = value;
+        clearMetadata = value;
+    
+        StateHasChanged(); //hook
+    }
+    
+    
+ 
+    private string manualTitle = "";
+    private string manualAuthor = "";
+    private string manualSubject = "";
+    private string manualCreator = "";
+    private string manualProducer = "";
+    private string manualKeywords = "";
+    
+    private async Task OnFilesSelected(InputFileChangeEventArgs e)
+    {
+        foreach (var file in e.GetMultipleFiles())
+        {
+            using var stream = file.OpenReadStream();
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var fileBytes = ms.ToArray();
+            var metadata = await GetPdfMetadata(fileBytes);
+            uploadedFiles.Add(new FileData
+            {
+                FileName = file.Name,
+                FileBytes = fileBytes,
+                Metadata = metadata
+            });
+        }
+    }
+    
+    private async Task<Metadata?> GetPdfMetadata(byte[] pdfBytes)
+    {
+        try
+        {
+            await using var ms = new MemoryStream(pdfBytes);
+            using var reader = new iText.Kernel.Pdf.PdfReader(ms);
+            using var pdfDoc = new iText.Kernel.Pdf.PdfDocument(reader);
+            var info = pdfDoc.GetDocumentInfo();
+            return PdfSanitizer.GetActualMetaData(info);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+    
+    private void RemoveFile(FileData file)
+    {
+        uploadedFiles.Remove(file);
+    }
+
+    private async Task ProcessFiles()
+    {
+        var options = new SanitizeOptions
+        {
+            FullClean = fullClean,
+            DeleteJavaScript = deleteJavaScript,
+            RemoveAnnotations = removeAnnotations,
+            RemoveFormFields = removeFormFields,
+            ClearMetadata = clearMetadata,
+            RemoveAcroForms = removeAcroForms,
+            RemoveEmbeddedFiles = removeEmbeddedFiles,
+            RemoveActions = removeActions
+        };
+
+        Metadata? metadata = null;
+        if (!string.IsNullOrWhiteSpace(manualTitle) ||
+            !string.IsNullOrWhiteSpace(manualAuthor) ||
+            !string.IsNullOrWhiteSpace(manualSubject) ||
+            !string.IsNullOrWhiteSpace(manualCreator) ||
+            !string.IsNullOrWhiteSpace(manualProducer) ||
+            !string.IsNullOrWhiteSpace(manualKeywords))
+        {
+            metadata = new Metadata
+            {
+                Title = manualTitle,
+                Author = manualAuthor,
+                Subject = manualSubject,
+                Creator = manualCreator,
+                Producer = manualProducer,
+                Keywords = manualKeywords
+            };
+        }
+
+        processedFiles.Clear();
+        
+        foreach (var file in uploadedFiles)
+        {
+            var processedFile = new FileData
+            {
+                FileName = $"processed_{file.FileName}",
+                FileBytes = await PdfSanitizer.SanitizeAsync(file.FileBytes, metadata, options)
+            };
+            processedFiles.Add(processedFile);
+        }
+
+        uploadedFiles.Clear();
+    }
+    /*private async Task ProcessFiles()
+    {
+        var option = new QuickSanitizeOptions();
+        if (js) option = QuickSanitizeOptions.JavaScript;
+        if (fullClean) option = QuickSanitizeOptions.FullClean;
+        
+        Metadata? metadata = null;
+        if (!string.IsNullOrWhiteSpace(manualTitle) ||
+            !string.IsNullOrWhiteSpace(manualAuthor) ||
+            !string.IsNullOrWhiteSpace(manualSubject) ||
+            !string.IsNullOrWhiteSpace(manualCreator) ||
+            !string.IsNullOrWhiteSpace(manualProducer) ||
+            !string.IsNullOrWhiteSpace(manualKeywords))
+        {
+            metadata = new Metadata
+            {
+                Title = manualTitle,
+                Author = manualAuthor,
+                Subject = manualSubject,
+                Creator = manualCreator,
+                Producer = manualProducer,
+                Keywords = manualKeywords
+            };
+        }
+
+        processedFiles.Clear();
+        foreach (var file in uploadedFiles)
+        {
+            var processedFile = new FileData
+            {
+                FileName = $"processed_{file.FileName}",
+                FileBytes = await PdfSanitizer.SanitizeAsync(file.FileBytes, metadata, option)
+            };
+            processedFiles.Add(processedFile);
+        }
+
+        uploadedFiles.Clear();
+    }*/
+
+
+    private async Task DownloadFile(FileData file)
+    {
+        var fileBase64 = Convert.ToBase64String(file.FileBytes);
+        var fileName = file.FileName;
+        await JSRuntime.InvokeVoidAsync("downloadFile", fileName, fileBase64);
+    }
+    
+    private async Task DownloadProcessedFiles()
+    {
+        foreach (var file in processedFiles)
+        {
+            await DownloadFile(file);
+        }
+    }
+    
+    private class FileData
+    {
+        public string FileName { get; set; } = string.Empty;
+        public byte[] FileBytes { get; set; } = Array.Empty<byte>();
+        public Metadata? Metadata { get; set; }
+    }
+
+}
