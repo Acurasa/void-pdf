@@ -1,4 +1,4 @@
-# PdfSanitizer
+# VoidPDF
 
 PdfSanitizer is a Blazor Server application that provides functionality to sanitize and modify PDF metadata and contents using iText7.
 
