@@ -1,0 +1,149 @@
+@page "/pdfviewer"
+@inject EditService EditService
+@inject IJSRuntime JSRuntime
+@using YourBlazorApp.Services
+@implements IDisposable
+
+<h3>PDF редактор</h3>
+
+<div class="row mb-3">
+    <div class="col">
+        <InputFile OnChange="@LoadFile" class="form-control" accept=".pdf" />
+    </div>
+    <div class="col">
+        @if (pdfLoaded)
+        {
+            <button class="btn btn-primary" @onclick="EnableHighlightMode">
+                @(highlightMode ? "Выключить режим выделения" : "Включить режим выделения")
+            </button>
+        }
+    </div>
+</div>
+
+csharp
+<div class="pdf-container" style="height: 100vh; width: 100%; border: 1px solid #ccc; position: relative;">
+    @if (pdfLoaded)
+    {
+    <iframe id="pdfViewer" src="@pdfUrl#view=FitH" style="width: 100%; height: 100%;" @ref="viewerElement"></iframe>
+    @if (highlightMode)
+    {
+    <div class="highlight-overlay" @ref="overlayElement"
+         @onmousedown="StartSelection"
+         @onmousemove="UpdateSelection"
+         @onmouseup="EndSelection"
+         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair;">
+        @if (isSelecting)
+        {
+        <div class="selection-box" style="@selectionStyle"></div>
+        }
+    </div>
+    }
+    }
+    else
+    {
+    <div class="text-center p-5">
+        <p>Загрузите PDF файл для начала работы</p>
+    </div>
+    }
+</div>
+
+@code {
+    private bool pdfLoaded = false;
+    private bool highlightMode = false;
+    private bool isSelecting = false;
+    private string pdfUrl = string.Empty;
+    private MemoryStream pdfStream;
+    private ElementReference viewerElement;
+    private ElementReference overlayElement;
+    
+    // Координаты выделения
+    private double startX, startY, currentX, currentY;
+    private int currentPage = 0;
+    private string selectionStyle => $"position: absolute; background-color: rgba(255, 255, 0, 0.3); border: 1px dashed #000; left: {Math.Min(startX, currentX)}px; top: {Math.Min(startY, currentY)}px; width: {Math.Abs(currentX - startX)}px; height: {Math.Abs(currentY - startY)}px;";
+    
+    private async Task LoadFile(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            // Читаем файл в память
+            pdfStream = new MemoryStream();
+            await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(pdfStream);
+            pdfStream.Position = 0;
+            
+            // Создаем временный URL для отображения PDF
+            var fileId = Guid.NewGuid().ToString();
+            pdfUrl = $"data:application/pdf;base64,{Convert.ToBase64String(pdfStream.ToArray())}";
+            pdfLoaded = true;
+            
+            // Сбрасываем режим выделения при загрузке нового файла
+            highlightMode = false;
+        }
+    }
+    
+    private void EnableHighlightMode()
+    {
+        highlightMode = !highlightMode;
+    }
+    
+    private void StartSelection(MouseEventArgs e)
+    {
+        if (highlightMode)
+        {
+            isSelecting = true;
+            startX =  e.ClientX;
+            startY =  e.ClientY;
+            currentX = startX;
+            currentY = startY;
+        }
+    }
+    
+    private void UpdateSelection(MouseEventArgs e)
+    {
+        if (isSelecting)
+        {
+            currentX = e.ClientX;
+            currentY = e.ClientY;
+        }
+    }
+    
+    private async Task EndSelection(MouseEventArgs e)
+    {
+        if (isSelecting)
+        {
+            isSelecting = false;
+            
+            // Получаем координаты относительно PDF страницы
+            var width = Math.Abs(currentX - startX);
+            var height = Math.Abs(currentY - startY);
+            
+            if (width > 5 && height > 5) // Минимальный размер выделения
+            {
+                // Сохраняем текущую позицию потока
+                var position = pdfStream.Position;
+                pdfStream.Position = 0;
+                
+                // Применяем выделение
+                var updatedPdfStream = EditService.HighlightText(
+                    pdfStream, 
+                    Math.Min(startX, currentX), 
+                    Math.Min(startY, currentY), 
+                    width, 
+                    height, 
+                    currentPage);
+                
+                // Обновляем отображение PDF
+                pdfStream = updatedPdfStream;
+                pdfUrl = $"data:application/pdf;base64,{Convert.ToBase64String(pdfStream.ToArray())}";
+                
+                // Принудительно обновляем компонент
+                StateHasChanged();
+            }
+        }
+    }
+    
+    public void Dispose()
+    {
+        pdfStream?.Dispose();
+    }
+}

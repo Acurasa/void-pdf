@@ -11,6 +11,7 @@
     <PackageReference Include="itext" Version="9.1.0" />
     <PackageReference Include="itext.bouncy-castle-adapter" Version="9.1.0" />
     <PackageReference Include="MudBlazor" Version="8.*" />
+    <PackageReference Include="PDFsharp" Version="6.2.0-preview-3" />
   </ItemGroup>
 
 
