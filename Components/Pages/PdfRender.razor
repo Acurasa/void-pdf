@@ -55,7 +55,13 @@ csharp
     private MemoryStream pdfStream;
     private ElementReference viewerElement;
     private ElementReference overlayElement;
-    
+    public class DomRect
+    {
+        public double left { get; set; }
+        public double top { get; set; }
+        public double width { get; set; }
+        public double height { get; set; }
+    }
     // Координаты выделения
     private double startX, startY, currentX, currentY;
     private int currentPage = 0;
@@ -112,31 +118,48 @@ csharp
         if (isSelecting)
         {
             isSelecting = false;
-            
-            // Получаем координаты относительно PDF страницы
-            var width = Math.Abs(currentX - startX);
-            var height = Math.Abs(currentY - startY);
-            
-            if (width > 5 && height > 5) // Минимальный размер выделения
+
+            // Минимальный размер выделения
+            double widthPixels = Math.Abs(currentX - startX);
+            double heightPixels = Math.Abs(currentY - startY);
+            if (widthPixels > 5 && heightPixels > 5)
             {
+                // Получаем размеры элемента просмотра PDF через JS interop
+                var rect = await JSRuntime.InvokeAsync<DomRect>("getElementRect", viewerElement);
+
+                // Допустим, мы знаем размеры PDF-страницы в пунктах (points)
+                // Здесь можно использовать размеры страницы из PdfSharp (page.Width и page.Height)
+                // Если страница имеет размеры, например, A4 (595 x 842 points), замените значения ниже на реальные
+                double pdfPageWidth = 595;
+                double pdfPageHeight = 842;
+
+                // Вычисляем масштаб преобразования (коэффициенты преобразования)
+                double scaleX = pdfPageWidth / rect.width;
+                double scaleY = pdfPageHeight / rect.height;
+
+                // Преобразуем координаты выделения в координаты PDF
+                double pdfX = (Math.Min(startX, currentX) - rect.left) * scaleX;
+                double pdfY = (Math.Min(startY, currentY) - rect.top) * scaleY;
+                double pdfWidth = widthPixels * scaleX;
+                double pdfHeight = heightPixels * scaleY;
+
                 // Сохраняем текущую позицию потока
-                var position = pdfStream.Position;
                 pdfStream.Position = 0;
-                
-                // Применяем выделение
+
+                // Применяем выделение с вычисленными координатами
                 var updatedPdfStream = EditService.HighlightText(
-                    pdfStream, 
-                    Math.Min(startX, currentX), 
-                    Math.Min(startY, currentY), 
-                    width, 
-                    height, 
+                    pdfStream,
+                    pdfX,
+                    pdfY,
+                    pdfWidth,
+                    pdfHeight,
                     currentPage);
-                
-                // Обновляем отображение PDF
+
+                // Обновляем PDF (при этом, если в параметрах URL не указан зум, он может сбрасываться)
                 pdfStream = updatedPdfStream;
-                pdfUrl = $"data:application/pdf;base64,{Convert.ToBase64String(pdfStream.ToArray())}";
-                
-                // Принудительно обновляем компонент
+                // Можно попытаться сохранить текущий зум: например, извлечь его из URL или хранить в отдельной переменной
+                pdfUrl = $"data:application/pdf;base64,{Convert.ToBase64String(pdfStream.ToArray())}#view=FitH";
+
                 StateHasChanged();
             }
         }
